@@ -1,0 +1,5 @@
+numpy>=1.24
+pypdf>=4.0
+requests>=2.31
+langchain>=1.0
+langchain-openai>=1.0
