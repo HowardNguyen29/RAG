@@ -3,7 +3,7 @@ name: Daily Telegram Agent
 on:
   schedule:
     # 11:30 Asia/Ho_Chi_Minh = 04:30 UTC
-    - cron: "30 4 * * *"
+    - cron: "45 0 * * *"
   workflow_dispatch:
 
 permissions:
@@ -12,7 +12,7 @@ permissions:
 jobs:
   run-agent:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 15
     env:
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       OPENAI_MODEL: ${{ secrets.OPENAI_MODEL }}
