@@ -1,0 +1,38 @@
+name: Daily Telegram Agent
+
+on:
+  schedule:
+    # 11:30 Asia/Ho_Chi_Minh = 04:30 UTC
+    - cron: "30 4 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  run-agent:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      OPENAI_MODEL: ${{ secrets.OPENAI_MODEL }}
+      TOMTOM_API_KEY: ${{ secrets.TOMTOM_API_KEY }}
+      BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+      HOME_LAT: ${{ secrets.HOME_LAT }}
+      HOME_LON: ${{ secrets.HOME_LON }}
+      WORK_LAT: ${{ secrets.WORK_LAT }}
+      WORK_LON: ${{ secrets.WORK_LON }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run telegram agent (scheduled window)
+        run: python scripts/telegram_agent.py
