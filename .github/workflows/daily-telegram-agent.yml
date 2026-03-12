@@ -35,4 +35,4 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Run telegram agent (scheduled window)
-        run: python scripts/telegram_agent.py
+        run: python scripts/telegram_agent.py --tool-backend mcp --mcp-client-mode stdio
