@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "RAG playground for chunking/embedding experiments"
 requires-python = ">=3.10"
 dependencies = [
-  "numpy>=1.24",
+  "numpy>=1.24,<2",
   "pypdf>=4.0",
   "requests>=2.31",
   "langchain>=1.0",
