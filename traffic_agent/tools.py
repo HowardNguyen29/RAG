@@ -5,11 +5,30 @@ from typing import Any
 from langchain.tools import tool
 
 from traffic_agent.config import AppConfig
+from traffic_agent.mcp_client import MCPToolClient
 from traffic_agent.services.routing import RoutingService
 from traffic_agent.services.weather import WeatherService
 
 
 def build_tools(
+    config: AppConfig,
+    routing: RoutingService,
+    weather: WeatherService,
+    *,
+    tool_backend: str = "local",
+    mcp_client: MCPToolClient | None = None,
+) -> list[Any]:
+    if tool_backend == "mcp":
+        if mcp_client is None:
+            print("Error: mcp_client is required when tool_backend='mcp'")
+            raise ValueError("mcp_client is required when tool_backend='mcp'")
+        print("Building MCP tools with client:", mcp_client)
+        return _build_mcp_tools(mcp_client)
+    print("Building local tools")
+    return _build_local_tools(config=config, routing=routing, weather=weather)
+
+
+def _build_local_tools(
     config: AppConfig,
     routing: RoutingService,
     weather: WeatherService,
@@ -48,5 +67,44 @@ def build_tools(
         )
         weather_text = weather.weather_text(lat=config.work_lat, lon=config.work_lon, num_hours=2)
         return f"{route_text}\n\n{weather_text}"
+
+    return [best_route, get_weather, home_to_work, get_lat_lon]
+
+
+def _build_mcp_tools(mcp_client: MCPToolClient) -> list[Any]:
+    @tool
+    def best_route(origin_lat: float, origin_lon: float, dest_lat: float, dest_lon: float) -> str:
+        """Find least-congested route between two coordinates and return detailed guidance."""
+        return mcp_client.call_tool(
+            "best_route",
+            {
+                "origin_lat": origin_lat,
+                "origin_lon": origin_lon,
+                "dest_lat": dest_lat,
+                "dest_lon": dest_lon,
+            },
+        )
+
+    @tool
+    def get_weather(lat: float, lon: float, num_hours: int = 2) -> str:
+        """Get current weather and next n-hour rain outlook for a coordinate."""
+        return mcp_client.call_tool(
+            "get_weather",
+            {
+                "lat": lat,
+                "lon": lon,
+                "num_hours": num_hours,
+            },
+        )
+
+    @tool
+    def get_lat_lon(address: str) -> str:
+        """Get coordinate lat,lon from an address string via TomTom geocoding."""
+        return mcp_client.call_tool("get_lat_lon", {"address": address})
+
+    @tool
+    def home_to_work() -> str:
+        """Get route from HOME_* to WORK_* coordinates and include rain-jacket advice."""
+        return mcp_client.call_tool("home_to_work", {})
 
     return [best_route, get_weather, home_to_work, get_lat_lon]
