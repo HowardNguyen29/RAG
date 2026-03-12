@@ -8,6 +8,13 @@ from typing import Any
 
 from traffic_agent.agent_runtime import build_agent_executor, extract_text_from_agent_result
 from traffic_agent.config import AppConfig
+from traffic_agent.mcp_client import (
+    LocalMCPConfig,
+    LocalMCPToolClient,
+    MCPToolClient,
+    RemoteMCPConfig,
+    RemoteSSEMCPToolClient,
+)
 from traffic_agent.memory import (
     load_offset,
     load_thread,
@@ -27,6 +34,10 @@ from traffic_agent.tools import build_tools
 class RuntimeOptions:
     offset_file: Path
     thread_dir: Path
+    tool_backend: str = "mcp"
+    mcp_client_mode: str = "sse"
+    mcp_server_module: str = "traffic_agent.mcp_server"
+    mcp_server_url: str = "http://127.0.0.1:8000/sse"
     max_turns: int = 12
     poll_timeout: int = 25
     sleep_seconds: float = 1.0
@@ -37,10 +48,30 @@ class TrafficTelegramBot:
     def __init__(self, config: AppConfig, options: RuntimeOptions) -> None:
         self.config = config
         self.options = options
+        if self.options.tool_backend not in {"local", "mcp"}:
+            raise ValueError("tool_backend must be either 'local' or 'mcp'")
+        if self.options.mcp_client_mode not in {"stdio", "sse"}:
+            raise ValueError("mcp_client_mode must be either 'stdio' or 'sse'")
 
         self.routing = RoutingService(api_key=config.tomtom_api_key)
         self.weather = WeatherService()
-        self.tools = build_tools(config=config, routing=self.routing, weather=self.weather)
+        self.mcp_client: MCPToolClient | None = None
+        if self.options.tool_backend == "mcp":
+            if self.options.mcp_client_mode == "stdio":
+                self.mcp_client = LocalMCPToolClient(
+                    LocalMCPConfig(module=self.options.mcp_server_module)
+                )
+            else:
+                self.mcp_client = RemoteSSEMCPToolClient(
+                    RemoteMCPConfig(server_url=self.options.mcp_server_url)
+                )
+        self.tools = build_tools(
+            config=config,
+            routing=self.routing,
+            weather=self.weather,
+            tool_backend=self.options.tool_backend,
+            mcp_client=self.mcp_client,
+        )
         self.agent = build_agent_executor(config=config, tools=self.tools)
         self.telegram = TelegramClient(bot_token=config.bot_token)
 
@@ -123,7 +154,7 @@ class TrafficTelegramBot:
                     try:
                         answer = self.process_user_message(chat_id=chat_id, text=text)
                     except Exception as exc:  # pragma: no cover
-                        answer = f"Loi khi xu ly: {exc}"
+                        answer = f"Loi khi xu ly: {_format_error_for_user(exc)}"
                     self.telegram.send_message(chat_id=chat_id, text=answer)
 
                 if self.options.once:
@@ -134,3 +165,26 @@ class TrafficTelegramBot:
             except Exception as exc:  # pragma: no cover
                 print(f"[warn] loop error: {exc}")
                 time.sleep(5)
+
+
+def _flatten_exceptions(exc: BaseException) -> list[BaseException]:
+    members = getattr(exc, "exceptions", None)
+    if isinstance(members, (list, tuple)) and members:
+        flat: list[BaseException] = []
+        for child in members:
+            if isinstance(child, BaseException):
+                flat.extend(_flatten_exceptions(child))
+        if flat:
+            return flat
+    return [exc]
+
+
+def _format_error_for_user(exc: BaseException) -> str:
+    leaf = _flatten_exceptions(exc)[-1]
+    text = str(leaf).strip() or leaf.__class__.__name__
+    msg = f"{leaf.__class__.__name__}: {text}"
+
+    lowered = msg.lower()
+    if "mcp sse call failed" in lowered or "connect" in lowered or "connection refused" in lowered:
+        return f"{msg}. Kiem tra MCP server dang chay: python -m traffic_agent.mcp_server --transport sse"
+    return msg

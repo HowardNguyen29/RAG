@@ -2,12 +2,7 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
-import sys
 from typing import Sequence
-
-# Allow `python traffic_agent/cli.py` from repository root.
-if __package__ is None or __package__ == "":
-    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from traffic_agent.bot import RuntimeOptions, TrafficTelegramBot
 from traffic_agent.config import load_app_config
@@ -17,6 +12,28 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Telegram traffic/weather agent bot")
     parser.add_argument("--offset-file", default=".telegram/offset.json", help="Path to store update offset")
     parser.add_argument("--thread-dir", default=".telegram/threads", help="Directory to store chat thread memory")
+    parser.add_argument(
+        "--tool-backend",
+        choices=["mcp", "local"],
+        default="mcp",
+        help="Tool execution backend. 'mcp' runs tools via MCP server.",
+    )
+    parser.add_argument(
+        "--mcp-client-mode",
+        choices=["sse", "stdio"],
+        default="sse",
+        help="How bot connects to MCP server when --tool-backend=mcp.",
+    )
+    parser.add_argument(
+        "--mcp-server-module",
+        default="traffic_agent.mcp_server",
+        help="Python module path for MCP server when --mcp-client-mode=stdio.",
+    )
+    parser.add_argument(
+        "--mcp-server-url",
+        default="http://127.0.0.1:8000/sse",
+        help="SSE URL for running MCP server when --mcp-client-mode=sse.",
+    )
     parser.add_argument("--max-turns", type=int, default=12, help="How many latest turns to keep per chat")
     parser.add_argument("--poll-timeout", type=int, default=25, help="Telegram long polling timeout (seconds)")
     parser.add_argument("--sleep-seconds", type=float, default=1.0, help="Sleep delay after each polling cycle")
@@ -31,6 +48,10 @@ def main(argv: Sequence[str] | None = None) -> None:
     options = RuntimeOptions(
         offset_file=Path(args.offset_file),
         thread_dir=Path(args.thread_dir),
+        tool_backend=args.tool_backend,
+        mcp_client_mode=args.mcp_client_mode,
+        mcp_server_module=args.mcp_server_module,
+        mcp_server_url=args.mcp_server_url,
         max_turns=args.max_turns,
         poll_timeout=args.poll_timeout,
         sleep_seconds=args.sleep_seconds,
